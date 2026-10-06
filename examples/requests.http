@@ -144,6 +144,13 @@ GET {{host}}/drills/{{drill}}/result
 ### 末类 counterpart_record_no / time_diff_seconds 均为 null。
 GET {{host}}/drills/{{drill}}/gap-diagnostics
 
+### 按台站汇总互证结果（只读；台站按呼号升序，带当前版本与封存状态）
+### 逐台站返回：日志总数 total_logs、已配对数 paired_logs（一对互证的
+### 两条记录分别计入两端台站）、未配对数 unpaired_logs（只计入其本台）、
+### 配对覆盖率 paired_coverage = paired_logs / total_logs（0..1，6 位小数）。
+### 仅在对方呼号中出现而未上报日志的台站不产生汇总项；空演练 stations 为空。
+GET {{host}}/drills/{{drill}}/station-summary
+
 ### 锁定一对互证候选（记录号顺序任意，服务端内部升序）
 ### 仅接受：现存、相互指认、波段/模式相同、时差不超允许值，
 ### 且两条记录均未被其他锁定占用。锁定强制入选结果（即使拉低全场配对数）。

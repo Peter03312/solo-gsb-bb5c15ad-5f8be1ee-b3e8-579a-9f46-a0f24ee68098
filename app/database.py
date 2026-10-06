@@ -1251,6 +1251,67 @@ def get_gap_diagnostics(drill_id: str) -> dict:
 
 
 # --------------------------------------------------------------------------
+# 按台站汇总（演练结果按台站统计）：只读，不改任何状态
+# --------------------------------------------------------------------------
+def get_station_summary(drill_id: str) -> dict:
+    """按台站呼号汇总当前日志与互证结果（只读）。
+
+    以记录的本台呼号归组：一对互证的两条记录分别计入两端台站的已配对
+    数；未配对记录只计入其本台。仅实际上报过日志的台站出现（仅在对方
+    呼号中出现的台站不产生汇总项）。台站按呼号升序；配对覆盖率 =
+    已配对数 / 日志总数（保留 6 位小数）。不改变日志、结果、版本与
+    快照；封存后仍可查询；未知演练抛 ``drill_not_found``。
+    """
+    conn = connect()
+    try:
+        with _read_tx(conn):
+            drill = _get_drill_row(conn, drill_id)
+            row = conn.execute(
+                "SELECT pairs_json, unpaired_json FROM results "
+                "WHERE drill_id = ?",
+                (drill_id,),
+            ).fetchone()
+            paired_nos: set[str] = set()
+            unpaired_nos: set[str] = set()
+            if row is not None:
+                for p in json.loads(row["pairs_json"]):
+                    paired_nos.add(p["record_a"])
+                    paired_nos.add(p["record_b"])
+                unpaired_nos = set(json.loads(row["unpaired_json"]))
+            records = _load_records(conn, drill_id)
+
+        # 结果与日志同事务落库：每条记录必属于已配对/未配对之一。
+        buckets: dict[str, list[int]] = {}  # 呼号 -> [总数, 已配对, 未配对]
+        for r in records:
+            bucket = buckets.setdefault(r.station, [0, 0, 0])
+            bucket[0] += 1
+            if r.record_no in paired_nos:
+                bucket[1] += 1
+            elif r.record_no in unpaired_nos:
+                bucket[2] += 1
+        stations = [
+            {
+                "station": station,
+                "total_logs": total,
+                "paired_logs": paired,
+                "unpaired_logs": unpaired,
+                "paired_coverage": (
+                    round(paired / total, 6) if total else 0.0
+                ),
+            }
+            for station, (total, paired, unpaired) in sorted(buckets.items())
+        ]
+        return {
+            "drill_id": drill_id,
+            "version": drill["version"],
+            "sealed": bool(drill["sealed"]),
+            "stations": stations,
+        }
+    finally:
+        conn.close()
+
+
+# --------------------------------------------------------------------------
 # 版本快照（复核员按版本回看 / 比较）：只读，不改变当前状态
 # --------------------------------------------------------------------------
 def _snapshot_payload(row: sqlite3.Row, sealed: bool) -> dict:

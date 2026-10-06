@@ -112,6 +112,19 @@
 后再查即反映现态；**封存后仍可查**；未知演练明确报错
 （`404 drill_not_found`，详见 5.7 节）。
 
+### 按台站汇总（演练结果台站统计）
+
+按演练把**当前日志与互证结果**汇总到台站维度：以每条日志的**本台呼号**
+归组，逐台站返回**日志总数、已配对数、未配对数与配对覆盖率**
+（已配对数 / 日志总数，保留 6 位小数）：
+
+- **一对互证记录分别计入两端台站**的已配对数；
+- **未配对记录只计入其本台**；仅在对方呼号中出现而未上报日志的台站
+  **不产生汇总项**；
+- 台站**按呼号升序**返回，并带**当前版本与封存状态**；
+- 汇总为**只读**：不改变日志、结果、版本与快照；**封存后仍可查**；
+  未知演练 `404 drill_not_found`；空演练返回空汇总（详见 5.8 节）。
+
 ---
 
 ## 2. 一键启动（Docker Compose，推荐）
@@ -633,6 +646,66 @@ curl http://127.0.0.1:8080/drills/DRILL-2026/gap-diagnostics
   `200`**（`sealed` 为 `true`）；未知演练返回 `404 drill_not_found`；
 - 演练尚无任何日志（空场）时 `gaps` 为空列表。
 
+### 5.8 按台站汇总（演练结果台站统计）
+
+#### `GET /drills/{drill_id}/station-summary` —— 按台站汇总互证结果（只读）
+
+按演练读取**当前日志与互证结果**，以每条日志的本台呼号归组，逐台站
+返回日志总数、已配对数、未配对数与配对覆盖率。
+
+```bash
+curl http://127.0.0.1:8080/drills/DRILL-2026/station-summary
+```
+
+响应 `200`：
+
+```json
+{
+  "drill_id": "DRILL-2026",
+  "version": 3,
+  "sealed": false,
+  "stations": [
+    {
+      "station": "BH1AAA",
+      "total_logs": 2,
+      "paired_logs": 1,
+      "unpaired_logs": 1,
+      "paired_coverage": 0.5
+    },
+    {
+      "station": "BH2BBB",
+      "total_logs": 1,
+      "paired_logs": 1,
+      "unpaired_logs": 0,
+      "paired_coverage": 1.0
+    },
+    {
+      "station": "BH3CCC",
+      "total_logs": 1,
+      "paired_logs": 0,
+      "unpaired_logs": 1,
+      "paired_coverage": 0.0
+    }
+  ]
+}
+```
+
+字段与统计口径：
+
+- `stations` 按台站呼号**升序**；只有**实际上报过日志**的台站才出现
+  （仅在对方呼号中被指认、自身未上报的台站不产生汇总项）；
+- `total_logs`：该台站上报的日志总数；`paired_logs`：其中进入互证
+  配对的条数——**一对互证的两条记录分别计入两端台站**；
+  `unpaired_logs`：其中未配对的条数——**未配对记录只计入其本台**；
+  恒有 `total_logs = paired_logs + unpaired_logs`；
+- `paired_coverage`：配对覆盖率 = `paired_logs / total_logs`
+  （0..1，保留 6 位小数，如 `0.333333`）；
+- `version` / `sealed` 为查询时的**当前现态**：查询本身不推进版本，
+  写入、更正、锁定/解除后再查即反映新结果与新版本；
+- 汇总为**只读操作**，不改变日志、结果、版本与快照；**封存后仍返回
+  `200`**（`sealed` 为 `true`）；未知演练返回 `404 drill_not_found`；
+- 演练尚无任何日志（空场）时 `stations` 为空列表。
+
 ---
 
 ## 6. 错误响应与状态码
@@ -646,7 +719,7 @@ curl http://127.0.0.1:8080/drills/DRILL-2026/gap-diagnostics
 | 时间缺时区信息 | `422` | `时间必须携带时区信息，例如 2026-10-04T08:00:00+08:00` |
 | 本台呼号与对方呼号相同 | `422` | `本台呼号与对方呼号不能相同` |
 | 记录号/呼号/波段/模式为空 | `422` | 对应字段不能为空 |
-| 未知演练（查询/写入/封存/锁定/缺口诊断） | `404` | `drill_not_found` |
+| 未知演练（查询/写入/封存/锁定/缺口诊断/台站汇总） | `404` | `drill_not_found` |
 | 演练号已存在 | `409` | `drill_exists` |
 | 写入/封存/锁定已封存演练 | `409` | `drill_sealed`（封存后查询仍 `200`） |
 | 批次内记录号重复 | `409` | `duplicate_record_in_batch` |
@@ -670,12 +743,14 @@ curl http://127.0.0.1:8080/drills/DRILL-2026/gap-diagnostics
 │   ├── main.py          # FastAPI 路由、异常处理、lifespan 初始化
 │   ├── schemas.py       # 请求/响应模型与输入校验（时区/负值/同呼号）
 │   ├── database.py      # SQLite 持久化、事务、版本/封存/锁定/快照/批量预演
+│   │                    #   与按台站汇总
 │   ├── matching.py      # 配对核心算法（二分图最小费用最大流，支持强制锁定）
 │   │                    #   与未配对缺口诊断（diagnose_gaps）
 │   └── config.py        # 环境变量配置
 ├── scripts/
 │   ├── init_db.py       # 数据初始化（建库/建表/WAL/旧库快照回填，幂等）
-│   └── demo.py          # 端到端调用演示（含版本回看/比较、缺口诊断，纯标准库）
+│   └── demo.py          # 端到端调用演示（含版本回看/比较、缺口诊断、
+│                        #   台站汇总，纯标准库）
 ├── tests/               # 算法单测（含穷举对照）+ HTTP 集成测试（含快照）
 ├── examples/requests.http
 ├── Dockerfile

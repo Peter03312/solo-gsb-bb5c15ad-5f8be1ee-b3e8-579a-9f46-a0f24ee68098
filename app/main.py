@@ -24,6 +24,7 @@ from .schemas import (
     SnapshotDiffResponse,
     SnapshotListResponse,
     SnapshotResponse,
+    StationSummaryResponse,
 )
 
 
@@ -36,11 +37,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="应急无线电演练通联日志互证服务",
-    version="1.4.0",
+    version="1.5.0",
     description=(
         "记录各台站通联日志，按相互指认、波段/模式一致、时差不超限的"
         "规则完成全场最优配对（最大配对数 → 最小总时差 → 字典序最小），"
-        "支持版本化更正、并发原子写入与演练封存。"
+        "支持版本化更正、并发原子写入、演练封存与按台站汇总配对覆盖率。"
     ),
     lifespan=lifespan,
 )
@@ -192,6 +193,16 @@ def get_result(drill_id: str) -> dict:
 )
 def get_gap_diagnostics(drill_id: str) -> dict:
     return database.get_gap_diagnostics(drill_id)
+
+
+@app.get(
+    "/drills/{drill_id}/station-summary",
+    response_model=StationSummaryResponse,
+    tags=["result"],
+    summary="按台站汇总互证结果（只读；一对互证分别计入两端台站，封存后仍可查）",
+)
+def get_station_summary(drill_id: str) -> dict:
+    return database.get_station_summary(drill_id)
 
 
 # --------------------------------------------------------------------------

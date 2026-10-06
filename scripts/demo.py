@@ -172,6 +172,11 @@ def main(base_url: str) -> None:
         "GET", f"{base_url}/drills/{drill}/gap-diagnostics"
     ))
 
+    # --- 按台站汇总：逐台站日志总数/已配对/未配对/配对覆盖率（只读） ---
+    show("按台站汇总互证结果（只读，台站按呼号升序）", *call(
+        "GET", f"{base_url}/drills/{drill}/station-summary"
+    ))
+
     # --- 版本快照：复核员按版本回看、比较两版差异（只读） ---
     # 列出已留存版本号（创建即有 0；每次真正推进版本同事务留存一版）
     show("已留存快照版本号", *call(
@@ -220,6 +225,11 @@ def main(base_url: str) -> None:
     # 封存后仍可进行缺口诊断（只读；版本、sealed 与最终现态一致）
     show("封存后仍可查询缺口诊断", *call(
         "GET", f"{base_url}/drills/{drill}/gap-diagnostics"
+    ))
+
+    # 封存后仍可按台站汇总（只读；sealed 为 true）
+    show("封存后仍可查询台站汇总", *call(
+        "GET", f"{base_url}/drills/{drill}/station-summary"
     ))
 
     # 未知演练明确报错：404 drill_not_found
