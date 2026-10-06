@@ -240,6 +240,27 @@ class GapDiagnosticsResponse(StrictModel):
     gaps: list[GapItemOut]
 
 
+class StationSummaryItem(StrictModel):
+    """单个台站的当前日志与互证覆盖统计。"""
+
+    station: str = Field(..., description="台站呼号")
+    total_logs: int = Field(..., description="该台本台日志总数")
+    paired_logs: int = Field(..., description="该台已参与互证配对的日志数")
+    unpaired_logs: int = Field(..., description="该台未配对日志数")
+    pair_coverage_rate: float = Field(
+        ..., ge=0, le=1, description="配对覆盖率：paired_logs / total_logs"
+    )
+
+
+class StationSummaryResponse(StrictModel):
+    """按台站呼号升序返回的当前互证汇总（只读）。"""
+
+    drill_id: str
+    version: int
+    sealed: bool
+    stations: list[StationSummaryItem]
+
+
 class LockRequest(StrictModel):
     """锁定/解除锁定请求体：一对记录号（顺序任意，服务端内部升序）。"""
 

@@ -633,6 +633,58 @@ curl http://127.0.0.1:8080/drills/DRILL-2026/gap-diagnostics
   `200`**（`sealed` 为 `true`）；未知演练返回 `404 drill_not_found`；
 - 演练尚无任何日志（空场）时 `gaps` 为空列表。
 
+### 5.8 按台站汇总（调用方查看演练覆盖情况）
+
+#### `GET /drills/{drill_id}/station-summary` —— 按台站汇总当前日志与互证结果（只读）
+
+调用方提交演练号，服务读取当前日志与当前互证结果，按台站呼号返回每个
+台站的日志总数、已配对数、未配对数与配对覆盖率。
+
+```bash
+curl http://127.0.0.1:8080/drills/DRILL-2026/station-summary
+```
+
+响应 `200`：
+
+```json
+{
+  "drill_id": "DRILL-2026",
+  "version": 3,
+  "sealed": false,
+  "stations": [
+    {
+      "station": "BH1AAA",
+      "total_logs": 3,
+      "paired_logs": 2,
+      "unpaired_logs": 1,
+      "pair_coverage_rate": 0.6666666666666666
+    },
+    {
+      "station": "BH2BBB",
+      "total_logs": 2,
+      "paired_logs": 2,
+      "unpaired_logs": 0,
+      "pair_coverage_rate": 1.0
+    }
+  ]
+}
+```
+
+统计口径：
+
+- 日志按其**本台呼号**（`station`）归属唯一台站；
+- **一对互证记录分别计入两端台站**：配对的两条记录本台呼号必然不同，
+  两端台站的 `paired_logs` 各加 1；
+- **未配对记录只计入其本台**，不计入该记录填写的对方呼号；
+- `total_logs = paired_logs + unpaired_logs`；
+- `pair_coverage_rate = paired_logs / total_logs`，取值 `0.0`～`1.0`；
+- `stations` 按 `station` 呼号**升序**返回；
+- `version` / `sealed` 为查询时的**当前现态**：查询本身不推进版本；
+- 空演练（尚无日志）返回空汇总：`"stations": []`，`version` 与封存状态
+  仍正常返回；
+- 汇总为**只读操作**，封存后仍可查询；未知演练返回既有错误
+  `404 drill_not_found`。
+
 ---
 
 ## 6. 错误响应与状态码
@@ -646,7 +698,7 @@ curl http://127.0.0.1:8080/drills/DRILL-2026/gap-diagnostics
 | 时间缺时区信息 | `422` | `时间必须携带时区信息，例如 2026-10-04T08:00:00+08:00` |
 | 本台呼号与对方呼号相同 | `422` | `本台呼号与对方呼号不能相同` |
 | 记录号/呼号/波段/模式为空 | `422` | 对应字段不能为空 |
-| 未知演练（查询/写入/封存/锁定/缺口诊断） | `404` | `drill_not_found` |
+| 未知演练（查询/写入/封存/锁定/缺口诊断/台站汇总） | `404` | `drill_not_found` |
 | 演练号已存在 | `409` | `drill_exists` |
 | 写入/封存/锁定已封存演练 | `409` | `drill_sealed`（封存后查询仍 `200`） |
 | 批次内记录号重复 | `409` | `duplicate_record_in_batch` |

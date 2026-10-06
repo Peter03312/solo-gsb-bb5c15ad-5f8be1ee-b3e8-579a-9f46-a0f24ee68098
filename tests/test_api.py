@@ -233,6 +233,114 @@ def test_concurrent_writes_are_serialized(client):
 
 
 # --------------------------------------------------------------------------
+# 按台站汇总
+# --------------------------------------------------------------------------
+def test_station_summary_counts_pair_at_both_ends_and_unpaired_at_owner(client):
+    client.post(
+        "/drills",
+        json={"drill_id": "SUM", "allowed_time_diff_seconds": 10},
+    )
+    r = client.post("/drills/SUM/logs", json={"logs": [
+        _log("R1", "BH2BBB", "BH1AAA", "2026-10-04T00:00:05+00:00"),
+        _log("R2", "BH1AAA", "BH2BBB", "2026-10-04T08:00:00+08:00"),
+        _log("R3", "BH3CCC", "BH9ZZZ", "2026-10-04T00:00:00+00:00"),
+        _log("R4", "BH1AAA", "BH2BBB", "2026-10-04T00:02:00+00:00"),
+    ]})
+    assert r.status_code == 200, r.text
+    result = r.json()
+    assert result["version"] == 1
+
+    r = client.get("/drills/SUM/station-summary")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["drill_id"] == "SUM"
+    assert body["version"] == 1
+    assert body["sealed"] is False
+    assert [s["station"] for s in body["stations"]] == [
+        "BH1AAA",
+        "BH2BBB",
+        "BH3CCC",
+    ]
+    by_station = {s["station"]: s for s in body["stations"]}
+    assert by_station["BH1AAA"] == {
+        "station": "BH1AAA",
+        "total_logs": 2,
+        "paired_logs": 1,
+        "unpaired_logs": 1,
+        "pair_coverage_rate": 0.5,
+    }
+    assert by_station["BH2BBB"] == {
+        "station": "BH2BBB",
+        "total_logs": 1,
+        "paired_logs": 1,
+        "unpaired_logs": 0,
+        "pair_coverage_rate": 1.0,
+    }
+    assert by_station["BH3CCC"] == {
+        "station": "BH3CCC",
+        "total_logs": 1,
+        "paired_logs": 0,
+        "unpaired_logs": 1,
+        "pair_coverage_rate": 0.0,
+    }
+
+
+def test_station_summary_empty_and_unknown_drill(client):
+    client.post(
+        "/drills",
+        json={"drill_id": "EMPTY", "allowed_time_diff_seconds": 10},
+    )
+    r = client.get("/drills/EMPTY/station-summary")
+    assert r.status_code == 200
+    assert r.json() == {
+        "drill_id": "EMPTY",
+        "version": 0,
+        "sealed": False,
+        "stations": [],
+    }
+
+    r = client.get("/drills/NOPE/station-summary")
+    assert r.status_code == 404
+    assert r.json()["error"] == "drill_not_found"
+
+
+def test_station_summary_reflects_current_version_and_seal(client):
+    client.post(
+        "/drills",
+        json={"drill_id": "D", "allowed_time_diff_seconds": 10},
+    )
+    client.put(
+        "/drills/D/logs/1",
+        json=_log("1", "A", "B", "2026-10-04T00:00:00+00:00"),
+    )
+    client.put(
+        "/drills/D/logs/2",
+        json=_log("2", "B", "A", "2026-10-04T00:00:02+00:00"),
+    )
+    client.post("/drills/D/seal")
+
+    body = client.get("/drills/D/station-summary").json()
+    assert body["version"] == 2
+    assert body["sealed"] is True
+    assert body["stations"] == [
+        {
+            "station": "A",
+            "total_logs": 1,
+            "paired_logs": 1,
+            "unpaired_logs": 0,
+            "pair_coverage_rate": 1.0,
+        },
+        {
+            "station": "B",
+            "total_logs": 1,
+            "paired_logs": 1,
+            "unpaired_logs": 0,
+            "pair_coverage_rate": 1.0,
+        },
+    ]
+
+
+# --------------------------------------------------------------------------
 # 人工锁定（复核员互证）
 # --------------------------------------------------------------------------
 def _seed_four(client, drill="LK", allowed=50):

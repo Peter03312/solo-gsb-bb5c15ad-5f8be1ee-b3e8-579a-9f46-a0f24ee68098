@@ -167,6 +167,11 @@ def main(base_url: str) -> None:
 
     show("查询最终互证结果", *call("GET", f"{base_url}/drills/{drill}/result"))
 
+    # --- 调用方按台站汇总：配对分别计入两端，未配对只计入本台（只读） ---
+    show("按台站汇总日志与配对覆盖率（只读，带当前版本）", *call(
+        "GET", f"{base_url}/drills/{drill}/station-summary"
+    ))
+
     # --- 复核员缺口诊断：为每条未配对记录按当前日志归因（只读） ---
     show("未配对日志缺口诊断（只读，带当前版本）", *call(
         "GET", f"{base_url}/drills/{drill}/gap-diagnostics"
@@ -217,12 +222,20 @@ def main(base_url: str) -> None:
 
     show("封存后仍可查询结果", *call("GET", f"{base_url}/drills/{drill}/result"))
 
+    # 封存后仍可查询按台站汇总（只读；版本、sealed 与最终现态一致）
+    show("封存后仍可查询台站汇总", *call(
+        "GET", f"{base_url}/drills/{drill}/station-summary"
+    ))
+
     # 封存后仍可进行缺口诊断（只读；版本、sealed 与最终现态一致）
     show("封存后仍可查询缺口诊断", *call(
         "GET", f"{base_url}/drills/{drill}/gap-diagnostics"
     ))
 
     # 未知演练明确报错：404 drill_not_found
+    show("未知演练的台站汇总（应 404 drill_not_found）", *call(
+        "GET", f"{base_url}/drills/NOPE/station-summary"
+    ))
     show("未知演练的缺口诊断（应 404 drill_not_found）", *call(
         "GET", f"{base_url}/drills/NOPE/gap-diagnostics"
     ))

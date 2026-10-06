@@ -134,6 +134,11 @@ GET {{host}}/drills/{{drill}}/logs
 ### 查询互证结果（配对 + 未配对 + 版本 + 总时差）
 GET {{host}}/drills/{{drill}}/result
 
+### 按台站汇总（只读；一对配对分别计入两端台站，未配对只计入本台）
+### 返回 total_logs / paired_logs / unpaired_logs / pair_coverage_rate，
+### 台站按呼号升序，并带当前 version 与 sealed；空演练 stations 为空。
+GET {{host}}/drills/{{drill}}/station-summary
+
 ### 未配对日志缺口诊断（只读；按当前日志依次归因，带当前版本）
 ### reason: candidate_occupied 候选已占用（有完全符合互指/波段/模式/时差
 ###         的候选却未入选，该候选必已被别的配对/锁定占用）
